@@ -37,12 +37,25 @@ async function run() {
 
         //get all parcels api
         app.get('/parcels', async (req, res) => {
-            
+            const query = {};
+            const {email} = req.query;
+            if(email){
+                query.senderEmail = email;
+            }
+
+            const options = {
+                sort: { createdAt: -1 }
+            }
+            const cursor = parcelsCollection.find(query,options);
+            const parcels = await cursor.toArray();
+            res.send(parcels);
         })
 
         //create parcel api
         app.post('/parcels', async (req, res) => {
             const parcel = req.body;
+            //add parcel created time
+            parcel.createdAt = new Date();
             const result = await parcelsCollection.insertOne(parcel);
             res.send(result);
         })
