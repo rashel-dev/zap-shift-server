@@ -70,9 +70,7 @@ async function run() {
         });
 
         //update parcel api
-        app.put('/parcels/:id', async (req, res) => {
-
-        })
+        app.put("/parcels/:id", async (req, res) => {});
 
         //delete parcel api
         app.delete("/parcels/:id", async (req, res) => {
@@ -106,12 +104,34 @@ async function run() {
                 metadata: {
                     parcelId: paymentInfo.parcelId,
                 },
-                success_url: `${process.env.PAYMENT_SITE_DOMAIN}/dashboard/payment-success`,
+                success_url: `${process.env.PAYMENT_SITE_DOMAIN}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
                 cancel_url: `${process.env.PAYMENT_SITE_DOMAIN}/dashboard/payment-cancelled`,
             });
 
-            console.log(session);
+            // console.log(session);
             res.send({ url: session.url });
+        });
+
+        //payment success api
+        app.patch("/payment-success", async (req, res) => {
+            const sessionId = req.query.session_id;
+            // console.log('session id', sessionId);
+            const session = await stripe.checkout.sessions.retrieve(sessionId);
+            // console.log(session);
+            if (session.payment_status === "paid") {
+                const id = session.metadata.parcelId;
+                const query = { _id: new ObjectId(id) };
+                const update = {
+                    $set: {
+                        paymentStatus: "paid",
+
+                    },
+                };
+                const result = await parcelsCollection.updateOne(query, update);
+                res.send(result);
+            }
+
+            res.send({ success: false });
         });
 
         // Send a ping to confirm a successful connection
