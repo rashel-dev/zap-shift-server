@@ -7,6 +7,14 @@ const app = express();
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
 
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+});
+
 const crypto = require("crypto");
 
 function generateTrackingId() {
@@ -19,6 +27,24 @@ function generateTrackingId() {
 //middleware
 app.use(cors());
 app.use(express.json());
+
+const verifyFBToken = async (req, res, next) => {
+    const token = req.headers.authorization;
+    if (!token) {
+        return res.status(401).send({ error: true, message: "Unauthorized access" });
+    }
+
+    try {
+        const idToken = token.split(" ")[1];
+        const decoded = await admin.auth().verifyIdToken(idToken);
+        // console.log("decoded token", decoded);
+        req.decoded_email = decoded.email;
+
+        next();
+    } catch (err) {
+        return res.status(401).send({ error: true, message: "Unauthorized access" });
+    }
+};
 
 //uri
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.0ocgkty.mongodb.net/?appName=Cluster0`;
@@ -180,11 +206,19 @@ async function run() {
         });
 
         //all payments get api
-        app.get("/payments", async (req, res) => {
+        app.get("/payments", verifyFBToken, async (req, res) => {
             const email = req.query.email;
             const query = {};
+
+            // console.log("headers", req.headers);
+
             if (email) {
                 query.customerEmail = email;
+
+                //check email address
+                if (email !== req.decoded_email) {
+                    return res.status(403).send({ error: true, message: "Forbidden access" });
+                }
             }
             const cursor = paymentCollection.find(query);
             const result = await cursor.toArray();
