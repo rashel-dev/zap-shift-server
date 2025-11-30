@@ -44,6 +44,9 @@ async function run() {
         const parcelsCollection = database.collection("parcels");
         const paymentCollection = database.collection("payments");
 
+        // Create unique index for transactionId to prevent double entry
+        await paymentCollection.createIndex({ transactionId: 1 }, { unique: true });
+
         //parcel related api
 
         //get all parcels api
@@ -92,6 +95,8 @@ async function run() {
         });
 
         //payment related api
+
+        //create checkout session api
         app.post("/create-checkout-session", async (req, res) => {
             const paymentInfo = req.body;
             const amount = parseInt(paymentInfo.cost) * 100;
@@ -129,7 +134,19 @@ async function run() {
             // console.log('session id', sessionId);
             const session = await stripe.checkout.sessions.retrieve(sessionId);
             // console.log(session);
-            const trakingId = generateTrackingId();
+
+            //to prevent double sava in the database
+            const transactionId = session.payment_intent;
+            const query = { transactionId: transactionId };
+            const paymentExist = await paymentCollection.findOne(query);
+
+            console.log("payment exist", paymentExist);
+
+            if (paymentExist) {
+                return res.send({ message: "Payment already processed", transactionId, trackingId: paymentExist.trackingId });
+            }
+
+            const trackingId = generateTrackingId();
 
             if (session.payment_status === "paid") {
                 const id = session.metadata.parcelId;
@@ -137,7 +154,7 @@ async function run() {
                 const update = {
                     $set: {
                         paymentStatus: "paid",
-                        trackingId: trakingId,
+                        trackingId: trackingId,
                     },
                 };
                 const result = await parcelsCollection.updateOne(query, update);
@@ -150,15 +167,28 @@ async function run() {
                     parcelName: session.metadata.parcelName,
                     transactionId: session.payment_intent,
                     paymentStatus: session.payment_status,
+                    trackingId: trackingId,
                     paidAt: new Date(),
                 };
 
                 const resultPayment = await paymentCollection.insertOne(payment);
-                res.send({ success: true, modifyParcel: result, trackingId: trakingId, transactionId: session.payment_intent, paymentInfo: resultPayment });
+                res.send({ success: true, modifyParcel: result, trackingId: trackingId, transactionId: session.payment_intent, paymentInfo: resultPayment });
                 return;
             }
 
             res.send({ success: false });
+        });
+
+        //all payments get api
+        app.get("/payments", async (req, res) => {
+            const email = req.query.email;
+            const query = {};
+            if (email) {
+                query.customerEmail = email;
+            }
+            const cursor = paymentCollection.find(query);
+            const result = await cursor.toArray();
+            res.send(result);
         });
 
         // Send a ping to confirm a successful connection
