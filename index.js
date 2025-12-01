@@ -67,13 +67,36 @@ async function run() {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
         const database = client.db(process.env.DB_NAME);
+        const usersCollection = database.collection("users");
         const parcelsCollection = database.collection("parcels");
         const paymentCollection = database.collection("payments");
+
+        //-----------------users related api------------------------
+
+        //get all users api
+        app.get("/users", async (req, res) => {
+            const result = await usersCollection.find({}).toArray();
+            res.send();
+        });
+
+        //get a single user api
+        app.get("/users/:id", async (req, res) => {});
+
+        //create a user api
+        app.post("/users", async (req, res) => {
+            const user = req.body;
+            // by default setting a user role as user
+            user.role = "user";
+            user.createdAt = new Date();
+
+            const result = await usersCollection.insertOne(user);
+            res.send(result);
+        });
 
         // Create unique index for transactionId to prevent double entry
         await paymentCollection.createIndex({ transactionId: 1 }, { unique: true });
 
-        //parcel related api
+        //-------------------parcel related api------------------------
 
         //get all parcels api
         app.get("/parcels", async (req, res) => {
@@ -120,7 +143,7 @@ async function run() {
             res.send(result);
         });
 
-        //payment related api
+        //---------------------payment related api-------------------------------
 
         //create checkout session api
         app.post("/create-checkout-session", async (req, res) => {
@@ -197,9 +220,11 @@ async function run() {
                     paidAt: new Date(),
                 };
 
-                const resultPayment = await paymentCollection.insertOne(payment);
-                res.send({ success: true, modifyParcel: result, trackingId: trackingId, transactionId: session.payment_intent, paymentInfo: resultPayment });
-                return;
+                if (session.payment_status === "paid") {
+                    const resultPayment = await paymentCollection.insertOne(payment);
+                    res.send({ success: true, modifyParcel: result, trackingId: trackingId, transactionId: session.payment_intent, paymentInfo: resultPayment });
+                    return;
+                }
             }
 
             res.send({ success: false });
@@ -220,7 +245,7 @@ async function run() {
                     return res.status(403).send({ error: true, message: "Forbidden access" });
                 }
             }
-            const cursor = paymentCollection.find(query);
+            const cursor = paymentCollection.find(query).sort({ paidAt: -1 });
             const result = await cursor.toArray();
             res.send(result);
         });
