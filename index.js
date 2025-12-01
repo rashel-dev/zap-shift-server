@@ -70,6 +70,13 @@ async function run() {
         const usersCollection = database.collection("users");
         const parcelsCollection = database.collection("parcels");
         const paymentCollection = database.collection("payments");
+        const ridersCollection = database.collection("riders");
+
+        // Create unique index for transactionId to prevent double entry
+        await paymentCollection.createIndex({ transactionId: 1 }, { unique: true });
+
+        // Create unique index for riders to prevent double entry
+        await ridersCollection.createIndex({ email: 1 }, { unique: true }); 
 
         //-----------------users related api------------------------
 
@@ -89,12 +96,32 @@ async function run() {
             user.role = "user";
             user.createdAt = new Date();
 
+            const email = user.email;
+            const userExist = await usersCollection.findOne({ email });
+            if (userExist) {
+                return res.send({ message: "User already exist" });
+            }
+
             const result = await usersCollection.insertOne(user);
             res.send(result);
         });
 
-        // Create unique index for transactionId to prevent double entry
-        await paymentCollection.createIndex({ transactionId: 1 }, { unique: true });
+        //-------------------riders related api------------------------
+
+        app.post("/riders", async (req, res) => {
+            const rider = req.body;
+
+            // Check if rider already exists
+            const existingRider = await ridersCollection.findOne({ email: rider.email });
+            if (existingRider) {
+                return res.send({ message: "Rider already applied", insertedId: null });
+            }
+
+            rider.status = "pending";
+            rider.createdAt = new Date();
+            const result = await ridersCollection.insertOne(rider);
+            res.send(result);
+        });
 
         //-------------------parcel related api------------------------
 
