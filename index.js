@@ -76,7 +76,7 @@ async function run() {
         await paymentCollection.createIndex({ transactionId: 1 }, { unique: true });
 
         // Create unique index for riders to prevent double entry
-        await ridersCollection.createIndex({ email: 1 }, { unique: true }); 
+        await ridersCollection.createIndex({ email: 1 }, { unique: true });
 
         //-----------------users related api------------------------
 
@@ -108,6 +108,21 @@ async function run() {
 
         //-------------------riders related api------------------------
 
+        //get all riders api
+        app.get("/riders", async (req, res) => {
+            const query = {};
+
+            // If query parameter exists (ex: ?status=pending), apply filter
+            if (req.query.status) {
+                query.status = req.query.status;
+            }
+            
+            const cursor = ridersCollection.find(query);
+            const riders = await cursor.toArray();
+            res.send(riders);
+        });
+
+        //create a rider api
         app.post("/riders", async (req, res) => {
             const rider = req.body;
 
@@ -122,6 +137,35 @@ async function run() {
             const result = await ridersCollection.insertOne(rider);
             res.send(result);
         });
+
+
+        //update rider info api
+        app.patch("/riders/:id",verifyFBToken, async (req, res) => {
+            const status = req.body.status;
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const updatedDoc = {
+                $set: {
+                    status: status,
+                }
+            }
+            const result = await ridersCollection.updateOne(query, updatedDoc);
+
+            if(status === "approved"){
+                const email = req.body.email;
+                const userQuery = {email};
+                const updateUser = {
+                    $set: {
+                        role: "rider",
+                    }
+                }
+                const userResult = await usersCollection.updateOne(userQuery, updateUser);
+                
+            }
+
+            res.send(result);
+            
+        })
 
         //-------------------parcel related api------------------------
 
