@@ -81,9 +81,10 @@ async function run() {
         //-----------------users related api------------------------
 
         //get all users api
-        app.get("/users", async (req, res) => {
-            const result = await usersCollection.find({}).toArray();
-            res.send();
+        app.get("/users", verifyFBToken, async (req, res) => {
+            const cursor = usersCollection.find();
+            const result = await cursor.toArray();
+            res.send(result);
         });
 
         //get a single user api
@@ -106,6 +107,21 @@ async function run() {
             res.send(result);
         });
 
+
+        //update a user info
+        app.patch("/users/:id", verifyFBToken, async (req, res) => {
+            const id = req.params.id;
+            const roleInfo = req.body;
+            const query = { _id: new ObjectId(id) };
+            const updatedDoc = {
+                $set: {
+                    role: roleInfo.role,
+                },
+            };
+            const result = await usersCollection.updateOne(query, updatedDoc);
+            res.send(result);
+        })
+
         //-------------------riders related api------------------------
 
         //get all riders api
@@ -116,7 +132,7 @@ async function run() {
             if (req.query.status) {
                 query.status = req.query.status;
             }
-            
+
             const cursor = ridersCollection.find(query);
             const riders = await cursor.toArray();
             res.send(riders);
@@ -138,34 +154,31 @@ async function run() {
             res.send(result);
         });
 
-
         //update rider info api
-        app.patch("/riders/:id",verifyFBToken, async (req, res) => {
+        app.patch("/riders/:id", verifyFBToken, async (req, res) => {
             const status = req.body.status;
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const updatedDoc = {
                 $set: {
                     status: status,
-                }
-            }
+                },
+            };
             const result = await ridersCollection.updateOne(query, updatedDoc);
 
-            if(status === "approved"){
+            if (status === "approved") {
                 const email = req.body.email;
-                const userQuery = {email};
+                const userQuery = { email };
                 const updateUser = {
                     $set: {
                         role: "rider",
-                    }
-                }
+                    },
+                };
                 const userResult = await usersCollection.updateOne(userQuery, updateUser);
-                
             }
 
             res.send(result);
-            
-        })
+        });
 
         //-------------------parcel related api------------------------
 
