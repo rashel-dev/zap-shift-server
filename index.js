@@ -99,7 +99,12 @@ async function run() {
             const searchText = req.query.searchText;
             const query = {};
             if (searchText) {
-                query.name = { $regex: searchText, $options: "i" };
+                // query.name = { $regex: searchText, $options: "i" };
+
+                query.$or = [
+                    { name: { $regex: searchText, $options: "i" } },
+                    { email: { $regex: searchText, $options: "i" } },
+                ]
             }
             const cursor = usersCollection.find(query).sort({ createdAt: -1 }).limit(10);
             const result = await cursor.toArray();
