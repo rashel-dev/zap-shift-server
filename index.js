@@ -78,6 +78,20 @@ async function run() {
         // Create unique index for riders to prevent double entry
         await ridersCollection.createIndex({ email: 1 }, { unique: true });
 
+        //more middleWare with database access
+        //must be used after verifyFBToken
+
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+            const isAdmin = user?.role === "admin";
+            if (!user || !isAdmin) {
+                return res.status(403).send({ error: true, message: "Forbidden access" });
+            }
+            next();
+        };
+
         //-----------------users related api------------------------
 
         //get all users api
@@ -88,7 +102,16 @@ async function run() {
         });
 
         //get a single user api
-        app.get("/users/:id", async (req, res) => {});
+        app.get("/users/:id", async (req, res) => {
+            const id = req.params.id;
+        });
+
+        app.get("/users/:email/role", async (req, res) => {
+            const email = req.params.email;
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+            res.send({ role: user?.role || "user" });
+        });
 
         //create a user api
         app.post("/users", async (req, res) => {
@@ -107,9 +130,8 @@ async function run() {
             res.send(result);
         });
 
-
         //update a user info
-        app.patch("/users/:id", verifyFBToken, async (req, res) => {
+        app.patch("/users/:id/role", verifyFBToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const roleInfo = req.body;
             const query = { _id: new ObjectId(id) };
@@ -120,7 +142,7 @@ async function run() {
             };
             const result = await usersCollection.updateOne(query, updatedDoc);
             res.send(result);
-        })
+        });
 
         //-------------------riders related api------------------------
 
@@ -155,7 +177,7 @@ async function run() {
         });
 
         //update rider info api
-        app.patch("/riders/:id", verifyFBToken, async (req, res) => {
+        app.patch("/riders/:id", verifyFBToken, verifyAdmin, async (req, res) => {
             const status = req.body.status;
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
