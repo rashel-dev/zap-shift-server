@@ -96,7 +96,12 @@ async function run() {
 
         //get all users api
         app.get("/users", verifyFBToken, async (req, res) => {
-            const cursor = usersCollection.find();
+            const searchText = req.query.searchText;
+            const query = {};
+            if (searchText) {
+                query.name = { $regex: searchText, $options: "i" };
+            }
+            const cursor = usersCollection.find(query).sort({ createdAt: -1 }).limit(10);
             const result = await cursor.toArray();
             res.send(result);
         });
