@@ -101,10 +101,7 @@ async function run() {
             if (searchText) {
                 // query.name = { $regex: searchText, $options: "i" };
 
-                query.$or = [
-                    { name: { $regex: searchText, $options: "i" } },
-                    { email: { $regex: searchText, $options: "i" } },
-                ]
+                query.$or = [{ name: { $regex: searchText, $options: "i" } }, { email: { $regex: searchText, $options: "i" } }];
             }
             const cursor = usersCollection.find(query).sort({ createdAt: -1 }).limit(10);
             const result = await cursor.toArray();
@@ -158,11 +155,20 @@ async function run() {
 
         //get all riders api
         app.get("/riders", async (req, res) => {
+            const { status, riderDistrict, workStatus } = req.query;
             const query = {};
 
             // If query parameter exists (ex: ?status=pending), apply filter
-            if (req.query.status) {
-                query.status = req.query.status;
+            if (status) {
+                query.status = status;
+            }
+
+            if (riderDistrict) {
+                query.riderDistrict = { $regex: `^${riderDistrict}$`, $options: "i" };
+            }
+
+            if (workStatus) {
+                query.workStatus = workStatus;
             }
 
             const cursor = ridersCollection.find(query);
@@ -194,6 +200,7 @@ async function run() {
             const updatedDoc = {
                 $set: {
                     status: status,
+                    workStatus: "available",
                 },
             };
             const result = await ridersCollection.updateOne(query, updatedDoc);
@@ -217,9 +224,12 @@ async function run() {
         //get all parcels api
         app.get("/parcels", async (req, res) => {
             const query = {};
-            const { email } = req.query;
+            const { email, deliveryStatus } = req.query;
             if (email) {
                 query.senderEmail = email;
+            }
+            if (deliveryStatus) {
+                query.deliveryStatus = deliveryStatus;
             }
 
             const options = {
@@ -248,7 +258,32 @@ async function run() {
         });
 
         //update parcel api
-        app.put("/parcels/:id", async (req, res) => {});
+        app.patch("/parcels/:id", async (req, res) => {
+            const id = req.params.id;
+            const { riderId, riderName, riderEmail, riderPhone} = req.body;
+            const query = { _id: new ObjectId(id) };
+            const updatedDoc = {
+                $set: {
+                    deliveryStatus:'driver_assigned',
+                    riderId,
+                    riderName,
+                    riderEmail,
+                    riderPhone,
+                }
+            }
+            const result = await parcelsCollection.updateOne(query, updatedDoc);
+
+            //update rider information
+            const riderQuery = {_id: new ObjectId(riderId)};
+            const riderUpdatedDoc = {
+                $set: {
+                    workStatus: 'in_delivery'
+                }
+            }
+            const riderResult = await ridersCollection.updateOne(riderQuery, riderUpdatedDoc);
+
+            res.send(riderResult);
+        });
 
         //delete parcel api
         app.delete("/parcels/:id", async (req, res) => {
@@ -319,6 +354,7 @@ async function run() {
                 const update = {
                     $set: {
                         paymentStatus: "paid",
+                        deliveryStatus: "pending-pickup",
                         trackingId: trackingId,
                     },
                 };
