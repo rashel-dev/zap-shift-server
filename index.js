@@ -9,7 +9,10 @@ const port = process.env.PORT || 3000;
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./zap-shift-firebase-adminsdk.json");
+// const serviceAccount = require("./firebase-admin-key.json");
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
@@ -88,6 +91,17 @@ async function run() {
             const user = await usersCollection.findOne(query);
             const isAdmin = user?.role === "admin";
             if (!user || !isAdmin) {
+                return res.status(403).send({ error: true, message: "Forbidden access" });
+            }
+            next();
+        };
+
+        const verifyRider = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await usersCollection.findOne(query);
+            const isRider = user?.role === "rider";
+            if (!user || !isRider) {
                 return res.status(403).send({ error: true, message: "Forbidden access" });
             }
             next();
@@ -277,6 +291,21 @@ async function run() {
             const parcel = await parcelsCollection.findOne(query);
             res.send(parcel);
         });
+
+
+        app.get("/parcels/delivery-status/stats", async (req, res) => {
+            const pipeline = [
+                {
+                    $group: {
+                        _id: "$deliveryStatus",
+                        count: { $sum: 1},
+                    }
+                }
+            ];
+            const result = await parcelsCollection.aggregate(pipeline).toArray();
+            res.send(result);
+        })
+
 
         //create parcel api
         app.post("/parcels", async (req, res) => {
@@ -488,8 +517,8 @@ async function run() {
         });
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Zap Shift server successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Zap Shift server successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
